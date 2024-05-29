@@ -22,7 +22,7 @@ namespace storeInventoryApi
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             base.OnConfiguring(optionsBuilder);
-            optionsBuilder.UseMySQL("server=localhost; database=StoreInventory; user=shola; password=@Villager99");
+            optionsBuilder.UseMySQL("server=localhost; database=StoreInventory; user=; password=");
         }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
