@@ -1,5 +1,5 @@
 # StoreInventoryAPI
-This API was created with .Net to for the  Admin side of a store to  perform crud functionalites of users and products
+This API was created with .Net to for the  Admin side of a store to  perform crud functionalites of staffs and products
 
 # Features 
 - Utilizes Entity Framework Core for potential database interactions.
