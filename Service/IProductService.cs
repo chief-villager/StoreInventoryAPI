@@ -1,17 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using storeInventoryApi.Models;
+using storeInventoryApi.Models.DTO;
 
 namespace storeInventoryApi.Service
 {
     public interface IProductService
     {
-        Task CreateProductAsync(string Name, string UserId, Decimal Price, CancellationToken cancellationToken);
-        Task DeleteProductAsync(Guid ProductId, string UserId, CancellationToken cancellationToken);
-        Task EditProductDetailAsync(Guid ProductId, string UserId, string productName, decimal Price, CancellationToken cancellationToken);
+        Task<ApiResponse<Products>> CreateProductAsync(CreateProductDto createProductDto, CancellationToken cancellationToken);
+        Task<ApiResponse<string>> DeleteProductAsync(Guid ProductId, CancellationToken cancellationToken);
+        Task<ApiResponse<Products>> EditProductDetailAsync(EditProductDto editProductDto, CancellationToken cancellationToken);
         Task<List<Products>> SearchProduct(string searchWord, CancellationToken cancellationToken);
+        Task<ApiResponse<Products>> GetProduct(Guid ProductId, CancellationToken cancellationToken);
 
     }
 }

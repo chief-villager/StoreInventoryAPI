@@ -1,10 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using Mapster;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using storeInventoryApi.Models;
+using storeInventoryApi.Models.DTO;
 using storeInventoryApi.Repository;
 
 namespace storeInventoryApi.Service
@@ -14,61 +12,119 @@ namespace storeInventoryApi.Service
         private readonly IRepository<Products> _productRepository;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ApplicationDbContext _dbContext;
-        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly TokenService _tokenService;
         public ProductService(
             IRepository<Products> productRepository,
             ApplicationDbContext dbContext,
             UserManager<ApplicationUser> userManager,
-            IHttpContextAccessor httpContextAccessor
+            TokenService tokenService
         )
         {
             _productRepository = productRepository;
             _dbContext = dbContext;
             _userManager = userManager;
-            _httpContextAccessor = httpContextAccessor;
+            _tokenService = tokenService;
         }
-        public async Task CreateProductAsync(string Name, string UserId, decimal Price, CancellationToken cancellationToken)
+        public async Task<ApiResponse<Products>> CreateProductAsync(CreateProductDto createProductDto, CancellationToken cancellationToken)
         {
-            if (Name == null || UserId == null || Price <= 0 || Guid.Parse(UserId) == Guid.Empty)
+            if (createProductDto == null)
             {
-                throw new NullReferenceException($"{Name} or {UserId} or {Price} cannot be null");
-            };
-            _ = await _userManager.FindByIdAsync(UserId) ?? throw new NullReferenceException("User not found");
-            Products product = new()
-            {
-                Name = Name,
-                Price = Price,
-
-            };
-            await _productRepository.CreateAsync(product, cancellationToken);
-        }
-
-        public async Task DeleteProductAsync(Guid ProductId, string UserId, CancellationToken cancellationToken)
-        {
-            if (ProductId == Guid.Empty || Guid.Parse(UserId) == Guid.Empty || String.IsNullOrEmpty(UserId))
-            {
-                throw new ArgumentNullException($"{nameof(ProductId)},{nameof(UserId)} cannot be null .");
+                return new ApiResponse<Products>($"{nameof(createProductDto)} is null ",  isSuccess:false);
             }
-            _ = await _userManager.FindByIdAsync(UserId)
-                     ?? throw new NullReferenceException("User not found");
+            var userId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new ApiResponse<Products>(" User is not Authenticated! ", isSuccess: false);
+            }
+            await _userManager.FindByIdAsync(userId);
+            var verifyUser = await _userManager.FindByIdAsync(userId);
+            if (verifyUser != null)
+            {
+                return new ApiResponse<Products>(" User is not Found! ", isSuccess: false);
+            }
+            ;
+            var newProduct = createProductDto.Adapt<Products>();
+            await _productRepository.CreateAsync(newProduct, cancellationToken);
+            return new ApiResponse<Products>(newProduct);
+        }
+
+        public async Task<ApiResponse<string>> DeleteProductAsync(Guid ProductId, CancellationToken cancellationToken)
+        {
+            if (ProductId == Guid.Empty)
+            {
+                return new ApiResponse<string>("productId cannot be empty",false);
+            }
+            var userId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new ApiResponse<string>("User is not authenticated.",false);
+            }
+            var verifyUser = await _userManager.FindByIdAsync(userId);
+            if (verifyUser != null)
+            {
+                return new ApiResponse<string>(" User is not Found! ", false);
+            }
+
             await _productRepository.DeleteAsync(ProductId, cancellationToken);
+            return new ApiResponse<string>( message:"product deleted successfully",isSuccess:true);
+
 
         }
 
-        public async Task EditProductDetailAsync(Guid ProductId, string UserId, string productName, decimal Price, CancellationToken cancellationToken)
+        public async Task<ApiResponse<Products>> EditProductDetailAsync(EditProductDto editProductDto, CancellationToken cancellationToken)
         {
-            if (ProductId == Guid.Empty || Guid.Parse(UserId) == Guid.Empty || String.IsNullOrEmpty(UserId) || String.IsNullOrEmpty(productName) || Price <= 0)
+            if (editProductDto == null)
             {
-                throw new ArgumentNullException($"{nameof(ProductId)},{nameof(UserId)},{nameof(Price)},{nameof(productName)} cannot be null .");
+                return new ApiResponse<Products>($"{nameof(editProductDto)} cannot be null", isSuccess: false);
             }
-            _ = await _userManager.FindByIdAsync(UserId)
-                    ?? throw new NullReferenceException("User not found");
+            var userId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new ApiResponse<Products>("User is not authenticated.", isSuccess: false);
+            }
+            var verifyUser = await _userManager.FindByIdAsync(userId);
+            if (verifyUser != null)
+            {
+                return new ApiResponse<Products>(" User is not Found! ", isSuccess: false);
+            }
 
-            var existingProduct = await _productRepository.GetAsync(ProductId, cancellationToken)
-                             ?? throw new NullReferenceException("product not found");
-            existingProduct.Name = productName;
-            existingProduct.Price = Price;
+            var existingProduct = await _productRepository.GetAsync(editProductDto.Id, cancellationToken);
+
+
+            if (existingProduct == null)
+            {
+                return new ApiResponse<Products>(" Product is not Found! ", isSuccess: false);
+            }
+
+            editProductDto.Adapt(existingProduct);
+
             await _productRepository.UpdateAsync(existingProduct, cancellationToken);
+            return new ApiResponse<Products>(existingProduct);
+        }
+
+        public async Task<ApiResponse<Products>> GetProduct(Guid ProductId, CancellationToken cancellationToken)
+        {
+            if (ProductId == Guid.Empty)
+            {
+                return new ApiResponse<Products>(" ProductId cannot be empty ", isSuccess: false);
+            }
+            var userId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new ApiResponse<Products>(" UserId is not Found! ", isSuccess: false);
+            }
+            var verifyUser = await _userManager.FindByIdAsync(userId);
+            if (verifyUser != null)
+            {
+                return new ApiResponse<Products>(" User is not Found! ", isSuccess: false);
+            }
+            var existingProduct = await _productRepository.GetAsync(ProductId, cancellationToken);
+            if (existingProduct == null)
+            {
+                return new ApiResponse<Products>(" Product is not Found! ",false);
+            }
+
+            return new ApiResponse<Products>(existingProduct);
         }
 
         public async Task<List<Products>> SearchProduct(string searchWord, CancellationToken cancellationToken)
@@ -77,7 +133,9 @@ namespace storeInventoryApi.Service
             {
                 return new List<Products>();
             }
-            return await _dbContext.Products.Where(p => p.Name != null && p.Name.Contains(searchWord)).ToListAsync(cancellationToken);
+            return await _dbContext.Products
+             .Where(p => p.Name.Contains(searchWord))
+             .ToListAsync(cancellationToken);
         }
     }
 }

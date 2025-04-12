@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace storeInventoryApi.Models
 {
-    public class ApplicationUser : IdentityUser<string>
+    public class ApplicationUser : IdentityUser
     {
 
     }
