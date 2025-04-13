@@ -1,139 +1,192 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Mapster;
 using Microsoft.AspNetCore.Identity;
-using storeInventoryApi.CustomExeptions;
-using storeInventoryApi.Enum;
 using storeInventoryApi.Models;
+using storeInventoryApi.Models.DTO;
 
 namespace storeInventoryApi.Service
 {
     public class UserService : IUserService
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly RoleManager<IdentityRole<string>> _roleManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly ApplicationDbContext _applicationDbContext;
         private readonly SignInManager<ApplicationUser> _signInManager;
-        private readonly IHttpContextAccessor _contextAccessor;
-        private readonly ApplicationDbContext _context;
+        private readonly TokenService _tokenService;
 
         public UserService(
-            UserManager<ApplicationUser> userManager,
-            RoleManager<IdentityRole<string>> roleManager,
-            SignInManager<ApplicationUser> signInManager,
-            IHttpContextAccessor contextAccessor,
-            ApplicationDbContext context
+             UserManager<ApplicationUser> userManager,
+             RoleManager<IdentityRole> roleManager,
+             TokenService tokenService,
+             ApplicationDbContext applicationDbContext,
+             SignInManager<ApplicationUser> signInManager
+
         )
         {
             _userManager = userManager;
             _roleManager = roleManager;
+            _tokenService = tokenService;
+            _applicationDbContext = applicationDbContext;
             _signInManager = signInManager;
-            _contextAccessor = contextAccessor;
-            _context = context;
         }
 
-        public async Task CreateAsync(string Email, string UserName, string Role, string Password, CancellationToken cancellationToken)
+        public async Task<ApiResponse<UserResponseDto>> CreateAsync(CreateUserRequestDto request, CancellationToken cancellationToken)
         {
-            if (Email == null || UserName == null || Password == null)
-            {
-                throw new ArgumentNullException("Email,UserName or Password cannot be null");
-            }
-            var existinguser = await _userManager.FindByEmailAsync(Email);
-            if (existinguser != null)
-            {
-                throw new UserAlreadyExistsException($"user with the {Email} already exist");
-            }
-            ApplicationUser user = new()
-            {
-                Id = Guid.NewGuid().ToString(),
-                Email = Email,
-                UserName = UserName
-            };
-            var result = await _userManager.CreateAsync(user, Password);
-            var newUser = result.Succeeded
-                    ? await _userManager.FindByEmailAsync(Email)
-                    ?? throw new NullReferenceException("")
-                    : throw new NullReferenceException("");
-
-
-            if (!await _roleManager.RoleExistsAsync(Role))
-            {
-                throw new NullReferenceException("Role not available");
-            }
-            await _userManager.AddToRoleAsync(newUser, Role);
-            await _context.SaveChangesAsync(cancellationToken);
-
-        }
-
-        public async Task DeleteUser(string UserId, string UserEmail, CancellationToken cancellationToken)
-        {
-            if (String.IsNullOrEmpty(UserId) || Guid.Parse(UserId) == Guid.Empty)
-            {
-                throw new ArgumentNullException(nameof(UserId));
-            }
-            var user = await _userManager.FindByEmailAsync(UserEmail) ?? throw new NullReferenceException("user not found");
-            await _userManager.DeleteAsync(user);
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-
-        public async Task<ApplicationUser> GetUser(string UserId, string UserEmail, CancellationToken cancellationToken)
-        {
-            if (String.IsNullOrEmpty(UserId) || Guid.Parse(UserId) == Guid.Empty)
-            {
-                throw new ArgumentNullException(nameof(UserId));
-            }
-            _ = await _userManager.FindByIdAsync(UserId.ToString()) ?? throw new NullReferenceException("user not found");
-            return await _userManager.FindByEmailAsync(UserEmail) ?? throw new NullReferenceException("user not found");
-
-
-        }
-
-        public async Task<bool> LoginUser(string Email, string Password, CancellationToken cancellationToken)
-        {
+            using var transaction = await _applicationDbContext.Database.BeginTransactionAsync(cancellationToken);
             try
             {
-                if (Email == null || Password == null)
+                var existingUser = await _userManager.FindByEmailAsync(request.Email);
+                if (existingUser != null)
                 {
-                    throw new ArgumentNullException("Email,UserName or Password cannot be null");
+                    return new ApiResponse<UserResponseDto>("User with the provided email already exists.", false);
                 }
-                var user = await _userManager.FindByEmailAsync(Email) ?? throw new NullReferenceException("user not found");
-                var userRole = await _userManager.GetRolesAsync(user);
-                var verifyPassword = await _userManager.CheckPasswordAsync(user, Password);
-                if (!verifyPassword)
+
+                var user = new ApplicationUser
                 {
-                    throw new ApplicationException("password verification failed");
+                    Id = Guid.NewGuid().ToString(),
+                    Email = request.Email,
+                    UserName = request.UserName
+                };
+
+                var result = await _userManager.CreateAsync(user, request.Password);
+                if (!result.Succeeded)
+                {
+                    //get the errors description from the identityResult and output it 
+                    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return new ApiResponse<UserResponseDto>($"User creation failed: {errors}", false);
                 }
-                var claims = new List<Claim>
-                {
-                new(ClaimTypes.NameIdentifier, user.Id),
-                new(ClaimTypes.Role, user.Email!)
 
-                };
-                claims.AddRange(userRole.Select(role => new Claim(ClaimTypes.Role, role)));
-
-                var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                var authProperties = new AuthenticationProperties
+                var newUser = await _userManager.FindByEmailAsync(request.Email);
+                if (newUser == null)
                 {
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10),
-                    IsPersistent = true,
-                    AllowRefresh = true
-                };
-                await _contextAccessor.HttpContext!.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(claimsIdentity),
-                authProperties);
-                return true;
+                    return new ApiResponse<UserResponseDto>("Newly created user not found.", false);
+                }
+
+                if (!await _roleManager.RoleExistsAsync(request.Role))
+                {
+                    return new ApiResponse<UserResponseDto>("Role not available.", false);
+                }
+
+                await _userManager.AddToRoleAsync(newUser, request.Role);
+
+                var responseDto = newUser.Adapt<UserResponseDto>();
+                responseDto.Role = request.Role;
+                await transaction.CommitAsync(cancellationToken);
+                return new ApiResponse<UserResponseDto>(responseDto);
+               
+
             }
-            catch
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return new ApiResponse<UserResponseDto>($"An error occurred: {ex.Message}", false);
+            };
+
+        }
+
+
+
+
+        public async Task<ApiResponse<string>> DeleteUser(string UserId, CancellationToken cancellationToken)
+        {
+            if (String.IsNullOrEmpty(UserId))
+            {
+                throw new ArgumentNullException(nameof(UserId));
+            }
+            var requesterId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(requesterId))
+            {
+                return new ApiResponse<string>("User is not Authenticated", false);
+            }
+            var user = await _userManager.FindByIdAsync(requesterId);
+            if (user == null)
             {
 
-                return false;
+                return new ApiResponse<string>("User is not Found", false);
+            }
+            var userToDelete = await _userManager.FindByIdAsync(requesterId);
+            if (userToDelete == null)
+            {
+                return new ApiResponse<string>("User is not Found", false);
+            }
+            var result = await _userManager.DeleteAsync(userToDelete);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return new ApiResponse<string>($"User creation failed: {errors}", false);
+            }
+            return new ApiResponse<string>("Operation successful", true);
+
+
+        }
+
+        public async Task<ApiResponse<UserResponseDto>> GetUser(CancellationToken cancellationToken)
+        {
+            var userId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new ApiResponse<UserResponseDto>("User is not Authenticated", false);
+            }
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return new ApiResponse<UserResponseDto>("User is not Found", false);
+            }
+            var userResponseDto = user.Adapt<UserResponseDto>();
+            return new ApiResponse<UserResponseDto>(userResponseDto);
+
+
+        }
+
+        public async Task<ApiResponse<UserResponseDto>> GetUser(string userId, CancellationToken cancellationToken)
+        {
+            var requesterId = _tokenService.GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return new ApiResponse<UserResponseDto>("User is not Authenticated", false);
             }
 
+            //check id of the person making the request . usually an admin with Authorization
+            var checkRequesterId = await _userManager.FindByIdAsync(userId);
+            if (checkRequesterId == null)
+            {
+                return new ApiResponse<UserResponseDto>("User is not Found", false);
+            }
+            // verify and get the id being user being requested for
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return new ApiResponse<UserResponseDto>("User is not Found", false);
+            }
+            var userResponseDto = user.Adapt<UserResponseDto>();
+            return new ApiResponse<UserResponseDto>(userResponseDto);
 
+        }
+
+
+        public async Task<ApiResponse<string>> LoginUser(LoginUserRequestDto loginUserRequestDto, CancellationToken cancellationToken)
+        {
+
+
+            var user = await _userManager.FindByEmailAsync(loginUserRequestDto.Email);
+            if (user == null)
+            {
+                return new ApiResponse<string>("User not found", false);
+            }
+            var userRole = await _userManager.GetRolesAsync(user);
+            //using signInManager offers more control and security for sign in over userManager in .net identity
+            var verifyPassword = await _signInManager.CheckPasswordSignInAsync(user, loginUserRequestDto.Password, false);
+
+            if (!verifyPassword.Succeeded)
+            {
+                return new ApiResponse<string>("password verification failed", false);
+            }
+            var token = _tokenService.CreateToken(user, userRole);
+            if (string.IsNullOrEmpty(token))
+            {
+                return new ApiResponse<string>("invalid token", false);
+            }
+
+            return new ApiResponse<string>(token);
 
         }
 

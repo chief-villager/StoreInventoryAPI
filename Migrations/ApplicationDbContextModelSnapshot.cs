@@ -47,19 +47,19 @@ namespace storeInventoryApi.Migrations
                     b.HasData(
                         new
                         {
-                            Id = "a188b7d1-d744-43ac-8f53-2b2003d141c0",
+                            Id = "1f44b6be-4f80-45e4-825b-584d4331dfca",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
                         },
                         new
                         {
-                            Id = "30b2a5da-4a50-4461-83cb-bbbecaac65e7",
+                            Id = "a6e412f9-0009-4b02-91a9-c8223167f764",
                             Name = "Manager",
                             NormalizedName = "MANAGER"
                         },
                         new
                         {
-                            Id = "59edbd71-2eb7-411e-80eb-44311bb0d8ff",
+                            Id = "32638563-b38c-48f3-94d9-cdea4fdbb034",
                             Name = "Cashiers",
                             NormalizedName = "CASHIERS"
                         });
@@ -236,6 +236,9 @@ namespace storeInventoryApi.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("char(36)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Name")
                         .HasColumnType("longtext");

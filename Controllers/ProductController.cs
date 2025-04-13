@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using storeInventoryApi.Models;
+using storeInventoryApi.Models.DTO;
 using storeInventoryApi.Service;
 
 namespace storeInventoryApi.Controllers
@@ -16,56 +11,59 @@ namespace storeInventoryApi.Controllers
     public class ProductController : ControllerBase
     {
         private readonly IProductService _productService;
-        private readonly IHttpContextAccessor _httpContextAccessor;
-        public ProductController(
-             IProductService productService,
-             IHttpContextAccessor httpContextAccessor
 
-        )
+        public ProductController(IProductService productService)
         {
             _productService = productService;
-            _httpContextAccessor = httpContextAccessor;
         }
 
         [Authorize(Roles = "Admin,Manager")]
         [HttpPost("create")]
-        public async Task<ActionResult> CreateProductAsync(string Name, decimal Price, CancellationToken cancellationToken)
+        public async Task<IActionResult> CreateProductAsync([FromBody] CreateProductDto createProductDto, CancellationToken cancellationToken)
         {
-            var UserId = _httpContextAccessor.HttpContext?.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.NameIdentifier)?.Value
-                            ?? throw new NullReferenceException("userId not found");
-            await _productService.CreateProductAsync(Name, UserId, Price, cancellationToken);
-            return Ok();
+            var result = await _productService.CreateProductAsync(createProductDto, cancellationToken);
 
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
         }
 
         [Authorize(Roles = "Admin,Manager")]
-        [HttpPost("edit/{ProductId:Guid}")]
-        public async Task<ActionResult> EditProductAsync(Guid ProductId, string Name, decimal Price, CancellationToken cancellationToken)
+        [HttpPut("{productId:guid}")]
+        public async Task<IActionResult> EditProductAsync([FromRoute] Guid productId, [FromBody] EditProductDto editProductDto, CancellationToken cancellationToken)
         {
-            var UserId = _httpContextAccessor.HttpContext?.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.NameIdentifier)?.Value
-                                        ?? throw new NullReferenceException("userId not found");
-            await _productService.EditProductDetailAsync(ProductId, UserId, Name, Price, cancellationToken);
-            return Ok();
+            editProductDto.Id = productId;
+
+            var result = await _productService.EditProductDetailAsync(editProductDto, cancellationToken);
+
+            if (!result.Success)
+                return BadRequest(result);
+
+            return Ok(result);
         }
 
         [Authorize(Roles = "Admin,Manager")]
-        [HttpDelete("delete/{ProductId:Guid}")]
-        public async Task<ActionResult> DeleteProductAsync(Guid ProductId, CancellationToken cancellationToken)
+        [HttpDelete("{productId:guid}")]
+        public async Task<IActionResult> DeleteProductAsync([FromRoute] Guid productId, CancellationToken cancellationToken)
         {
-            var UserId = _httpContextAccessor.HttpContext?.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.NameIdentifier)?.Value
-                                                    ?? throw new NullReferenceException("userId not found");
+            var result = await _productService.DeleteProductAsync(productId, cancellationToken);
 
-            await _productService.DeleteProductAsync(ProductId, UserId, cancellationToken);
-            return Ok();
+            if (!result.Success)
+                return BadRequest(result);
 
+            return Ok(result);
         }
 
-        [Authorize]
-        [HttpGet("search")]
-        public async Task<ActionResult<List<Products>>> SearchProductAsync(string query, CancellationToken cancellationToken)
+        [HttpGet("search/{search}")]
+        public async Task<IActionResult> SearchProductAsync([FromRoute] string search, CancellationToken cancellationToken)
         {
-            var products = await _productService.SearchProduct(query, cancellationToken);
-            return Ok(products);
+            var result = await _productService.SearchProduct(search, cancellationToken);
+
+            if (result == null || result.Count == 0)
+                return NotFound("No products found matching your search criteria.");
+
+            return Ok(result);
         }
     }
 }

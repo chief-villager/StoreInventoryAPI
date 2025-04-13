@@ -9,7 +9,7 @@ using MySql.EntityFrameworkCore.Metadata;
 namespace storeInventoryApi.Migrations
 {
     /// <inheritdoc />
-    public partial class newMigration : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -24,8 +24,7 @@ namespace storeInventoryApi.Migrations
                     Id = table.Column<string>(type: "varchar(255)", nullable: false),
                     Name = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
                     NormalizedName = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "longtext", nullable: true),
-                    Discriminator = table.Column<string>(type: "varchar(21)", maxLength: 21, nullable: false)
+                    ConcurrencyStamp = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -65,7 +64,8 @@ namespace storeInventoryApi.Migrations
                 {
                     Id = table.Column<Guid>(type: "char(36)", nullable: false),
                     Name = table.Column<string>(type: "longtext", nullable: true),
-                    Price = table.Column<decimal>(type: "decimal(18,2)", nullable: false)
+                    Price = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    Description = table.Column<string>(type: "longtext", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -186,12 +186,12 @@ namespace storeInventoryApi.Migrations
 
             migrationBuilder.InsertData(
                 table: "AspNetRoles",
-                columns: new[] { "Id", "ConcurrencyStamp", "Discriminator", "Name", "NormalizedName" },
+                columns: new[] { "Id", "ConcurrencyStamp", "Name", "NormalizedName" },
                 values: new object[,]
                 {
-                    { "2b0f98b8-c778-4b11-ae8d-9dc96f7fd051", null, "IdentityRole", "Cashiers", "CASHIERS" },
-                    { "892582c4-ba5e-4761-84b8-27a3935f4935", null, "IdentityRole", "Manager", "MANAGER" },
-                    { "8fb64804-b1bd-43cf-9fcb-33df567f435a", null, "IdentityRole", "Admin", "ADMIN" }
+                    { "1f44b6be-4f80-45e4-825b-584d4331dfca", null, "Admin", "ADMIN" },
+                    { "32638563-b38c-48f3-94d9-cdea4fdbb034", null, "Cashiers", "CASHIERS" },
+                    { "a6e412f9-0009-4b02-91a9-c8223167f764", null, "Manager", "MANAGER" }
                 });
 
             migrationBuilder.CreateIndex(

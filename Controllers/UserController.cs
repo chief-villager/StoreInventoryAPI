@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using storeInventoryApi.Models.DTO;
 using storeInventoryApi.Service;
 
 namespace storeInventoryApi.Controllers
@@ -15,50 +16,56 @@ namespace storeInventoryApi.Controllers
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
-        private readonly IHttpContextAccessor _httpContext;
-        private readonly ApplicationDbContext _dbContext;
+        
         public UserController(
-            IUserService userService,
-            IHttpContextAccessor httpContext,
-            ApplicationDbContext dbContext
+            IUserService userService
         )
         {
             _userService = userService;
-            _httpContext = httpContext;
-            _dbContext = dbContext;
+           
         }
 
         [AllowAnonymous]
         [HttpPost("create")]
-        public async Task<ActionResult> RegisterUserAsync(string Email, string UserName, string Role, string Password, CancellationToken cancellationToken)
+        public async Task<IActionResult> CreateUser([FromBody] CreateUserRequestDto request, CancellationToken cancellationToken)
         {
-            await _userService.CreateAsync(Email, UserName, Role, Password, cancellationToken);
-            return Ok();
+            var response = await _userService.CreateAsync(request, cancellationToken);
+            return StatusCode(response.Success ? 200 : 400, response);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpDelete("delete/{UserEmail}")]
-        public async Task<ActionResult> DeleteUserAsync([FromRoute] string UserEmail, CancellationToken cancellationToken)
+        [HttpDelete("{userId}")]
+        public async Task<IActionResult> DeleteUser(string userId, CancellationToken cancellationToken)
         {
-            var UserId = _httpContext.HttpContext?.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.NameIdentifier)?.Value ?? throw new NullReferenceException("userId not found");
-            await _userService.DeleteUser(UserId, UserEmail, cancellationToken);
-            return Ok();
-
+            var response = await _userService.DeleteUser(userId, cancellationToken);
+            return StatusCode(response.Success ? 200 : 400, response);
         }
 
         [AllowAnonymous]
         [HttpPost("login")]
-
-        public async Task<ActionResult> LoginUserAsync(string Email, string Password, CancellationToken cancellationToken)
+        public async Task<IActionResult> LoginUser([FromBody] LoginUserRequestDto request, CancellationToken cancellationToken)
         {
-            var response = await _userService.LoginUser(Email, Password, cancellationToken);
-            if (response)
-            {
-                return Ok();
-            }
-            return BadRequest();
+            var response = await _userService.LoginUser(request, cancellationToken);
+            return StatusCode(response.Success ? 200 : 400, response);
         }
 
+        [Authorize]
+        [HttpGet("me")]
+        public async Task<IActionResult> GetCurrentUser(CancellationToken cancellationToken)
+        {
+            var response = await _userService.GetUser(cancellationToken);
+            return StatusCode(response.Success ? 200 : 400, response);
+        }
 
+        /// <summary>
+        /// Get user by ID
+        /// </summary>
+        [Authorize(Roles ="Admin")]
+        [HttpGet("{userId}")]
+        public async Task<IActionResult> GetUserById(string userId, CancellationToken cancellationToken)
+        {
+            var response = await _userService.GetUser(userId, cancellationToken);
+            return StatusCode(response.Success ? 200 : 400, response);
+        }
     }
 }
